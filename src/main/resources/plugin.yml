@@ -1,0 +1,9 @@
+name: PotionZ
+version: '1.0'
+main: com.itsazza.potionz.PotionZ
+api-version: 1.17
+authors: [ ItsAZZA ]
+website: https://bcsn.us
+commands:
+  potionz:
+    aliases: ['potions']
