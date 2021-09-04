@@ -11,22 +11,17 @@ import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.HumanEntity
 import org.bukkit.entity.Player
-import org.bukkit.event.inventory.ClickType
-import org.bukkit.inventory.ItemFlag
-import org.bukkit.inventory.meta.PotionMeta
 import org.bukkit.potion.PotionEffect
 
-class PotionEffectMenu(private var potionEffect: PotionEffect) {
-    private val potionTypes = listOf(Material.POTION, Material.SPLASH_POTION, Material.LINGERING_POTION)
-    private var type = 0
-    private val config = PotionZ.instance.config
-    private val romanNumerals = config.getBoolean("romanNumerals")
+class PotionEffectMenu(private var potionEffect: PotionEffect, private val potions: HashSet<PotionEffect>) {
+    lateinit var player: Player
 
     fun open(player: Player) {
-        create(player).show(player)
+        this.player = player
+        create().show(player)
     }
 
-    private fun create(player: Player): InventoryGui {
+    private fun create(): InventoryGui {
         val gui = InventoryGui(
             PotionZ.instance,
             "Effect Editor",
@@ -34,9 +29,9 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
                 "         ",
                 " abcAdef ",
                 " ghiBjkl ",
-                "    m    ",
-                "   123   ",
-                "   =@    "
+                "   m n   ",
+                "         ",
+                "   =@1   "
             )
         )
 
@@ -55,21 +50,49 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
             createAddDurationButton('j', 20),
             createAddDurationButton('k', 600),
             createAddDurationButton('l', 6000),
-            givePotionItemButton,
-            givePotionEffectButton,
             toggleParticlesButton.also {
-                it.setState(potionEffect.hasParticles().toString())
+                val ambient = potionEffect.isAmbient
+                val particles = potionEffect.hasParticles()
+                if (particles) {
+                    if (ambient) {
+                        it.setState("ambient")
+                    } else {
+                        it.setState("true")
+                    }
+                } else {
+                    it.setState("false")
+                }
+            },
+            toggleIconButton.also {
+                it.setState(potionEffect.hasIcon().toString())
             },
             Buttons.close,
-            Buttons.backInHistory
+            Buttons.backInHistory,
+            saveButton
         )
-        if (player.hasPermission("potionz.menu.commandblock")) {
-            gui.addElement(givePotionCommandBlockButton)
-        }
         gui.setFiller(Material.PURPLE_STAINED_GLASS_PANE.item)
         gui.setCloseAction { false }
         return gui
     }
+
+    private val saveButton: StaticGuiElement
+        get() = StaticGuiElement(
+            '1',
+            Material.GREEN_DYE.item,
+            {
+                potions.removeIf { it.type == potionEffect.type }
+                potions.add(potionEffect)
+                PotionMainMenu(potions).open(player)
+                return@StaticGuiElement true
+            },
+            "§eAdd Effect",
+            "§7Adds this effect to the list",
+            "§7of effects and opens the potion",
+            "§7selection menu where you can get",
+            "§7the created potion",
+            "§0 ",
+            "§eClick to save!"
+        )
 
     private val amplifierButton: DynamicGuiElement
         get() = DynamicGuiElement('A') { _: HumanEntity? ->
@@ -98,7 +121,7 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
                 val player = it.event.whoClicked as Player
                 val current = potionEffect.amplifier
                 potionEffect =
-                    PotionEffect(potionEffect.type, potionEffect.duration, (current + amount).coerceAtMost(127))
+                    PotionEffect(potionEffect.type, potionEffect.duration, (current + amount).coerceAtMost(127), potionEffect.isAmbient, potionEffect.hasParticles(), potionEffect.hasIcon())
                 Sounds.play(player, Sound.BLOCK_METAL_PRESSURE_PLATE_CLICK_ON)
                 it.gui.draw()
                 return@StaticGuiElement true
@@ -115,7 +138,7 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
                 val current = potionEffect.amplifier
                 val player = it.event.whoClicked as Player
                 potionEffect =
-                    PotionEffect(potionEffect.type, potionEffect.duration, (current - amount).coerceAtLeast(0))
+                    PotionEffect(potionEffect.type, potionEffect.duration, (current - amount).coerceAtLeast(0), potionEffect.isAmbient, potionEffect.hasParticles(), potionEffect.hasIcon())
                 Sounds.play(player, Sound.BLOCK_METAL_PRESSURE_PLATE_CLICK_ON)
                 it.gui.draw()
                 return@StaticGuiElement true
@@ -132,7 +155,7 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
                 val current = potionEffect.duration
                 val player = it.event.whoClicked as Player
                 potionEffect =
-                    PotionEffect(potionEffect.type, (current + amount).coerceAtMost(30000), potionEffect.amplifier)
+                    PotionEffect(potionEffect.type, (current + amount).coerceAtMost(30000), potionEffect.amplifier, potionEffect.isAmbient, potionEffect.hasParticles(), potionEffect.hasIcon())
                 Sounds.play(player, Sound.BLOCK_METAL_PRESSURE_PLATE_CLICK_ON)
                 it.gui.draw()
                 return@StaticGuiElement true
@@ -149,7 +172,7 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
                 val current = potionEffect.duration
                 val player = it.event.whoClicked as Player
                 potionEffect =
-                    PotionEffect(potionEffect.type, (current - amount).coerceAtLeast(20), potionEffect.amplifier)
+                    PotionEffect(potionEffect.type, (current - amount).coerceAtLeast(20), potionEffect.amplifier, potionEffect.isAmbient, potionEffect.hasParticles(), potionEffect.hasIcon())
                 Sounds.play(player, Sound.BLOCK_METAL_PRESSURE_PLATE_CLICK_ON)
                 it.gui.draw()
                 return@StaticGuiElement true
@@ -164,7 +187,7 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
             GuiStateElement.State(
                 {
                     potionEffect =
-                        PotionEffect(potionEffect.type, potionEffect.duration, potionEffect.amplifier, false, true)
+                        PotionEffect(potionEffect.type, potionEffect.duration, potionEffect.amplifier, false, true, potionEffect.hasIcon())
                     it.gui.draw()
                 },
                 "true",
@@ -182,7 +205,7 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
             GuiStateElement.State(
                 {
                     potionEffect =
-                        PotionEffect(potionEffect.type, potionEffect.duration, potionEffect.amplifier, true, true)
+                        PotionEffect(potionEffect.type, potionEffect.duration, potionEffect.amplifier, true, true, potionEffect.hasIcon())
                     it.gui.draw()
                 },
                 "ambient",
@@ -200,7 +223,7 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
             GuiStateElement.State(
                 {
                     potionEffect =
-                        PotionEffect(potionEffect.type, potionEffect.duration, potionEffect.amplifier, false, false)
+                        PotionEffect(potionEffect.type, potionEffect.duration, potionEffect.amplifier, false, false, potionEffect.hasIcon())
                     it.gui.draw()
                 },
                 "false",
@@ -217,136 +240,48 @@ class PotionEffectMenu(private var potionEffect: PotionEffect) {
             )
         )
 
-    private val givePotionItemButton: DynamicGuiElement
-        get() = DynamicGuiElement('1') { viewer: HumanEntity? ->
-            StaticGuiElement(
-                '1',
-                potionTypes[type].item.mutateMeta<PotionMeta> {
-                    it.color = potionEffect.type.color
-                    it.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS)
-                },
-                {
-                    val player = viewer as Player
-                    val minecraftEffectName =
-                        potionEffect.type.minecraftID().replace("minecraft:", "").split("_")
-                            .joinToString(" ") { part -> part.toLowerCase().capitalize() }
-
-
-                    if (it.type.isLeftClick) {
-                        if (!player.hasPermission("potionz.menu.item")) {
-                            player.sendMessage("§cYou don't have permission to get potion items!")
-                            Sounds.play(player, Sound.ENTITY_VILLAGER_NO)
-                            return@StaticGuiElement true
-                        }
-
-                        player.inventory.addItem(potionTypes[type].item.mutateMeta<PotionMeta> { potion ->
-                            potion.color = potionEffect.type.color
-                            potion.addCustomEffect(potionEffect, true)
-                            potion.setDisplayName("§f${formatBukkitString(potionTypes[type].name)} of $minecraftEffectName")
-                            potion.lore = arrayListOf(
-                                "§9$minecraftEffectName ${
-                                    if (romanNumerals) potionEffect.amplifier.plus(1)
-                                        .toRomanNumeral() else potionEffect.amplifier.plus(1)
-                                } (${getPotionDurationMMSS(potionEffect.duration / 20)})"
-                            )
-                            potion.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS)
-                        })
-                        return@StaticGuiElement true
-                    } else {
-                        type = (type + 1) % potionTypes.size
-                        Sounds.play(player, Sound.ENTITY_CHICKEN_EGG)
-                        it.gui.draw()
-                        return@StaticGuiElement true
-                    }
-                },
-                "§6§lGet Potion Item",
-                "§7${formatBukkitString(potionEffect.type.name)}",
-                "§8${potionEffect.type.minecraftID()}",
-                "§0 ",
-                "§aDuration: §7${getPotionDurationMMSS(potionEffect.duration / 20)}",
-                "§aAmplifier: §7${potionEffect.amplifier + 1}",
-                "§aType: §7${formatBukkitString(potionTypes[type].name)}",
-                "§0 ",
-                "§e§lL-CLICK §7to get",
-                "§e§lR-CLICK §7to toggle type"
-            )
-        }
-
-    private val givePotionCommandBlockButton: DynamicGuiElement
-        get() = DynamicGuiElement('2') { viewer: HumanEntity? ->
-            StaticGuiElement(
-                '2',
-                Material.COMMAND_BLOCK.item,
-                {
-                    val player = viewer as Player
-                    val commandString =
-                        "minecraft:effect give <selector> ${potionEffect.type.minecraftID()} ${potionEffect.duration / 20} ${potionEffect.amplifier} ${!potionEffect.hasParticles()}"
-                    when (it.event.click) {
-                        ClickType.LEFT -> {
-                            player.inventory.addItem(commandBlockWithCommand(commandString.replace("<selector>", "@p")))
-                            return@StaticGuiElement true
-                        }
-                        ClickType.RIGHT -> {
-                            player.inventory.addItem(commandBlockWithCommand(commandString.replace("<selector>", "@a")))
-                            return@StaticGuiElement true
-                        }
-                        ClickType.SHIFT_LEFT,
-                        ClickType.SHIFT_RIGHT -> {
-                            player.inventory.addItem(commandBlockWithCommand(commandString.replace("<selector>", "@e")))
-                            return@StaticGuiElement true
-                        }
-                        else -> return@StaticGuiElement true
-                    }
-                },
-                "§6§lGet Potion Command Block",
-                "§7${formatBukkitString(potionEffect.type.name)}",
-                "§8${potionEffect.type.minecraftID()}",
-                "§0 ",
-                "§aDuration: §7${getPotionDurationMMSS(potionEffect.duration / 20)}",
-                "§aAmplifier: §7${potionEffect.amplifier + 1}",
-                "§0 ",
-                "§e§lL-CLICK §7to get with selector @p",
-                "§e§lR-CLICK §7to get with selector @a",
-                "§e§lSHIFT-CLICK §7to get with selector @e"
-            )
-        }
-
-    private val givePotionEffectButton: DynamicGuiElement
-        get() = DynamicGuiElement(
-            '3'
-        ) { viewer: HumanEntity? ->
-            StaticGuiElement(
-                '3',
-                Material.BEACON.item,
-                {
-                    val player = viewer as Player
-                    if (!player.hasPermission("potionz.menu.effect")) {
-                        player.sendMessage("§cYou don't have permission to get potion items!")
-                        Sounds.play(player, Sound.ENTITY_VILLAGER_NO)
-                        return@StaticGuiElement true
-                    }
-                    player.addPotionEffect(potionEffect)
-                    Sounds.play(player, Sound.ENTITY_VILLAGER_YES)
-                    player.sendMessage(
-                        "§eApplied ${formatBukkitString(potionEffect.type.name)} ${
-                            if (romanNumerals) potionEffect.amplifier.plus(
-                                1
-                            ).toRomanNumeral() else potionEffect.amplifier.plus(1)
-                        } for ${getPotionDurationMMSS(potionEffect.duration / 20)}"
-                    )
-                    it.gui.close()
-                    return@StaticGuiElement true
-                },
-                "§6§lApply Potion Effect",
-                "§7${formatBukkitString(potionEffect.type.name)}",
-                "§8${potionEffect.type.minecraftID()}",
-                "§0 ",
-                "§aDuration: §7${getPotionDurationMMSS(potionEffect.duration / 20)}",
-                "§aAmplifier: §7${potionEffect.amplifier + 1}",
-                "§0 ",
-                "§e§lL-CLICK §7to apply",
-            )
-        }
+    private val toggleIconButton: GuiStateElement
+    get() = GuiStateElement(
+        'n',
+        GuiStateElement.State(
+            {
+                potionEffect = PotionEffect(potionEffect.type, potionEffect.duration, potionEffect.amplifier, potionEffect.isAmbient, potionEffect.hasParticles(), false)
+            },
+            "false",
+            Material.DEAD_FIRE_CORAL.item,
+            "§6§lEffect Icon",
+            "§7Should the applied effect show",
+            "§7the player the icon on the top right",
+            "§7of their screen",
+            "§0 ",
+            "§cDoesn't work when applying with a",
+            "§ccommand block",
+            "§0 ",
+            "§8Show",
+            "§c▶ Don't Show",
+            "§0 ",
+            "§eClick to toggle!"
+        ),
+        GuiStateElement.State(
+            {
+                potionEffect = PotionEffect(potionEffect.type, potionEffect.duration, potionEffect.amplifier, potionEffect.isAmbient, potionEffect.hasParticles(), true)
+            },
+            "true",
+            Material.FIRE_CORAL.item,
+            "§6§lEffect Icon",
+            "§7Should the applied effect show",
+            "§7the player the icon on the top right",
+            "§7of their screen",
+            "§0 ",
+            "§cDoesn't work when applying with a",
+            "§ccommand block",
+            "§0 ",
+            "§a▶ Show",
+            "§8Don't Show",
+            "§0 ",
+            "§eClick to toggle!"
+        )
+    )
 
     private fun getPotionDurationMMSS(time: Int): String {
         return "%02d:%02d".format(time / 60, time % 60)

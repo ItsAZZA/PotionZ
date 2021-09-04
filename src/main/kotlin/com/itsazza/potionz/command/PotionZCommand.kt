@@ -11,7 +11,7 @@ object PotionZCommand : CommandExecutor {
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (sender !is Player) return true
         if (args.isEmpty()) {
-            PotionMainMenu.open(sender)
+            PotionMainMenu().open(sender)
             return true
         }
 
@@ -22,7 +22,7 @@ object PotionZCommand : CommandExecutor {
                     PotionZ.instance.reloadConfig()
                 }
             }
-            else -> PotionMainMenu.open(sender)
+            else -> PotionMainMenu().open(sender)
         }
         return true
     }

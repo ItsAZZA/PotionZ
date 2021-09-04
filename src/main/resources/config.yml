@@ -1,1 +1,4 @@
 romanNumerals: true
+# Whether the two colored asterix' should be shown with the potion effects to
+# show the status of the particles and icon
+statusInformation: true
